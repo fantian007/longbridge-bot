@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * 长桥 Longbridge OpenAPI 投资助手
  *

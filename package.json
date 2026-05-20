@@ -6,25 +6,36 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsx src/index.ts",
-    "account": "tsx src/account/index.ts",
-    "quote": "tsx src/quote/index.ts",
-    "order": "tsx src/order/index.ts",
-    "trade": "tsx src/trade/console.ts",
-    "watchlist": "tsx src/watchlist/index.ts",
+    "build": "npx -p typescript tsc",
+    "dev": "npx tsx src/index.ts",
+    "account": "npx tsx src/account/index.ts",
+    "quote": "npx tsx src/quote/index.ts",
+    "order": "npx tsx src/order/index.ts",
+    "trade": "npx tsx src/trade/console.ts",
+    "watchlist": "npx tsx src/watchlist/index.ts",
     "start": "node dist/index.js"
   },
-  "keywords": ["longbridge", "stock", "trading", "investment"],
+  "keywords": [
+    "longbridge",
+    "stock",
+    "trading",
+    "investment"
+  ],
   "author": "fantian007",
   "license": "MIT",
   "dependencies": {
-    "@types/node": "^25.9.0",
     "https-proxy-agent": "^9.0.0",
     "longbridge": "^4.1.0",
-    "longbridge-linux-x64-gnu": "^4.1.0",
     "socks-proxy-agent": "^10.0.0",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3"
+  },
+  "optionalDependencies": {
+    "longbridge-darwin-arm64": "^4.1.0",
+    "longbridge-darwin-x64": "^4.1.0",
+    "longbridge-linux-x64-gnu": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1"
   }
 }
