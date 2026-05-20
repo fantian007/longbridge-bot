@@ -13,7 +13,9 @@
     "order": "npx tsx src/order/index.ts",
     "trade": "npx tsx src/trade/console.ts",
     "watchlist": "npx tsx src/watchlist/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "trading": "npx tsx src/trading.ts",
+    "monitor": "./monitor.sh"
   },
   "keywords": [
     "longbridge",
