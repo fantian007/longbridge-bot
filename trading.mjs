@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
- * 长桥 24H 自动盯盘系统
- * 用法: node trading.mjs
+ * 长桥 24H 自动盯盘 + 交易系统
+ * 用法: node trading.mjs          # 仅监控
+ *       node trading.mjs --trade  # 监控 + 自动交易
  */
+const AUTO_TRADE = process.argv.includes("--trade");
 import { execSync } from "child_process";
 
 const LB = "/usr/local/bin/longbridge";
@@ -87,8 +89,8 @@ function analyze(klines) {
 // ---- 信号引擎 ----
 function signal(ind, holding, asset, sentiment=0) {
   let score = 0; const reasons = [];
-  if (ind.trend === "up") { score += 3; reasons.push("上升趋势"); }
-  else if (ind.trend === "down") { score -= 3; reasons.push("下降趋势"); }
+  if (ind.trend === "up") { score += 2; reasons.push("上升趋势"); }
+  else if (ind.trend === "down") { score -= 2; reasons.push("下降趋势"); }
   if (ind.rsi14 != null) {
     if (ind.rsi14 < 30) { score += 2; reasons.push("RSI超卖"); }
     else if (ind.rsi14 > 70) { score -= 2; reasons.push("RSI超买"); }
@@ -105,7 +107,8 @@ function signal(ind, holding, asset, sentiment=0) {
   if (ind.adx != null && ind.adx > 25) { if (ind.pdi > ind.ndi) score += 1; else score -= 1; }
   if (ind.vwap != null) score += ind.price > ind.vwap ? 0.5 : -0.5;
   score += sentiment;
-  const action = score >= 5 && !holding ? "BUY" : score <= -3 && holding ? "SELL" : "HOLD";
+  // 降低阈值：买入 >= 2 积极建仓，卖出 <= -2 果断止损
+  const action = score >= 2 && !holding ? "BUY" : score <= -2 && holding ? "SELL" : "HOLD";
   let stopLoss, takeProfit, qty;
   if (action === "BUY" && ind.atr14 && asset) {
     const risk = asset * 0.02, stopDist = ind.atr14 * 2;
@@ -170,6 +173,47 @@ async function main() {
     console.log(`  ${s.action==="BUY"?"🟢":"🔴"} ${s.action} ${s.symbol.padEnd(10)} 分数:${s.score.toFixed(1)}  建议价:$${s.price?.toFixed(2)}  数量:${s.qty??"-"}`);
     if (s.reasons?.length) console.log(`     ${s.reasons.join(" | ")}`);
     if (s.stopLoss) console.log(`     止损:$${s.stopLoss}  止盈:$${s.takeProfit}`);
+  }
+
+  // ---- 自动交易执行 ----
+  if (AUTO_TRADE) {
+    console.log(`\n── 自动交易 ──`);
+    // 风险控制：总持仓不超过 60%，单只不超过 15%
+    const totalMktValue = holdings.reduce((s, h) => s + h.marketValue, 0);
+    const maxTotal = asset * 0.60, maxSingle = asset * 0.15;
+    let executed = 0;
+
+    for (const s of nonHold) {
+      if (executed >= 3) break; // 单次最多 3 笔
+      const holding = holdings.find(h => h.symbol === s.symbol);
+      const currentValue = holding?.marketValue ?? 0;
+
+      if (s.action === "BUY") {
+        // 风控检查
+        const newValue = currentValue + (s.qty ?? 0) * s.price;
+        if (totalMktValue + newValue - currentValue > maxTotal) {
+          console.log(`  ⏭ ${s.symbol} 超过总仓位上限 (60%)，跳过`);
+          continue;
+        }
+        if (newValue > maxSingle) {
+          console.log(`  ⏭ ${s.symbol} 超过单只上限 (15%)，跳过`);
+          continue;
+        }
+        // 执行买入
+        const qty = Math.min(s.qty ?? 10, Math.floor((maxSingle - currentValue) / s.price));
+        if (qty <= 0) { console.log(`  ⏭ ${s.symbol} 仓位已满，跳过`); continue; }
+        const ret = cli(`order buy ${s.symbol} --price ${s.price?.toFixed(2)} --quantity ${qty}`) || execSync(`echo "y" | ${LB} order buy ${s.symbol} ${qty} --price ${s.price?.toFixed(2)}`, { encoding:"utf8", timeout:15000, env:ENV });
+        console.log(`  ✅ 买入 ${s.symbol} ${qty}股 @ $${s.price?.toFixed(2)}`);
+        executed++;
+      }
+
+      if (s.action === "SELL" && holding) {
+        const ret = execSync(`echo "y" | ${LB} order sell ${s.symbol} ${holding.qty} --price ${s.price?.toFixed(2)}`, { encoding:"utf8", timeout:15000, env:ENV, cwd:"/tmp" });
+        console.log(`  ✅ 卖出 ${s.symbol} ${holding.qty}股 @ $${s.price?.toFixed(2)}`);
+        executed++;
+      }
+    }
+    if (executed === 0) console.log("  无符合条件的交易");
   }
 
   console.log(`\n── 技术指标 ──`);
