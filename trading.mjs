@@ -175,6 +175,26 @@ async function main() {
     if (s.stopLoss) console.log(`     止损:$${s.stopLoss}  止盈:$${s.takeProfit}`);
   }
 
+  // ---- 智能撤单重挂 ----
+  (function checkOrders() {
+    const orders = cli("order");
+    if (!Array.isArray(orders)) return;
+    const pending = orders.filter(o => o.status === "New" || o.status === "Queued");
+    for (const o of pending) {
+      const q = cli(`quote ${o.symbol}`);
+      if (!Array.isArray(q) || !q.length) continue;
+      const last = parseFloat(q[0].last), orderPx = parseFloat(o.price);
+      const dev = Math.abs(last - orderPx) / orderPx;
+      const ageMin = (Date.now() - new Date(o.created_at).getTime()) / 60000;
+      if (dev > 0.005 || ageMin > 15) {
+        try { execSync(`echo "y" | ${LB} order cancel ${o.order_id}`, { encoding:"utf8", timeout:15000, env:ENV, cwd:"/tmp" }); } catch {}
+        const newPx = (last * (o.side === "Buy" ? 1.001 : 0.999)).toFixed(2);
+        try { execSync(`echo "y" | ${LB} order ${o.side === "Buy" ? "buy" : "sell"} ${o.symbol} ${o.quantity} --price ${newPx}`, { encoding:"utf8", timeout:15000, env:ENV, cwd:"/tmp" }); } catch {}
+        console.log(`  🔄 重挂 ${o.symbol} ${o.side} $${orderPx}→$${newPx} 偏离${(dev*100).toFixed(1)}%`);
+      }
+    }
+  })();
+
   // ---- 自动交易执行 ----
   if (AUTO_TRADE) {
     console.log(`\n── 自动交易 ──`);
